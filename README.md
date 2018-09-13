@@ -43,7 +43,7 @@ has not changed. For those stores, the return policy was a 60 days-return policy
 ## Business Questions 
 Set hypotheses first and compared with the results
 
-**What is the impact of the policy change: **
+**What is the impact of the policy change:** <br>
 **1. On online channel sales?**
 > There is no measurable Impact of Policy Change on online sales!
 
