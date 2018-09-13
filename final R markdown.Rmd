@@ -1,0 +1,1080 @@
+---
+title: "Bus Analytics Project 3: Return Policy Change"
+author: "Joohyeun Yi(Julia), Chunfeng Wu (Alice), Bochen, Greg Murray"
+date: "November 30, 2017"
+output: html_document
+---
+
+# set word director and import data
+```{r}
+setwd("/Users/alicewu/Documents/SCU/R-Econometric/case/final Return policy change project")
+
+```
+
+# Question 1: Impact of policy change on online channel sales. 
+
+# import data for Q1.
+```{r}
+onlineQ1 <- read.csv("onlineQ1.csv")
+
+```
+
+# creat two key independent variables
+```{r}
+summary(onlineQ1)
+
+onlineQ1$post_policy_numeric <- ifelse(onlineQ1$day <= 183, 0, 1)
+onlineQ1$study_group_numeric <- ifelse(onlineQ1$store_number==10,0,1)
+
+# create factor variables
+onlineQ1$study_group<- factor(onlineQ1$study_group_numeric)
+onlineQ1$post_policy <- factor(onlineQ1$post_policy_numeric)
+onlineQ1$month_factor <- factor(onlineQ1$month_dummy)
+
+```
+
+# multicolinearity check
+```{r}
+hist(onlineQ1$daily_sales)
+hist(log(onlineQ1$daily_sales)) # use log
+onlineQ1$log_dailysales <- log(1+onlineQ1$daily_sales)
+hist(onlineQ1$daily_sales_quanity)
+hist(log(onlineQ1$daily_sales_quanity)) # use log
+onlineQ1$log_daily_sales_quanity <- log(onlineQ1$daily_sales_quanity)
+hist(onlineQ1$ave_price) # use raw data
+
+df1 <- data.frame(onlineQ1$post_policy_numeric,onlineQ1$study_group_numeric,
+                  onlineQ1$month_dummy,onlineQ1$ave_price,onlineQ1$log_daily_sales_quanity)
+library(usdm)
+cor(df1)
+vif(df1) # after delete day, year, store_number one by one
+
+```
+
+# Data visualization 
+```{r}
+
+boxplot(onlineQ1$log_dailysales~onlineQ1$study_group, xlab="study group", ylab="sales")
+boxplot(onlineQ1$log_dailysales~onlineQ1$post_policy,xlab="post policy", ylab="sales")
+boxplot(onlineQ1$log_dailysales~onlineQ1$month_index,xlab="month", ylab="sales")
+plot(onlineQ1$log_daily_sales_quanity,onlineQ1$log_dailysales)
+
+```
+
+# model check
+```{r}
+# For online store sales, we should not including customer info as control variable, because customer info came after sales.
+#intial model
+onlineQ1_model0 <- lm(log_dailysales~post_policy*study_group+month_factor+ave_price,data=onlineQ1) 
+summary(onlineQ1_model0) 
+# add log_daily_sales_quanity
+onlineQ1_model1 <- lm(log_dailysales~post_policy*study_group+month_factor+ave_price+log_daily_sales_quanity,data=onlineQ1) 
+
+anova(onlineQ1_model0,onlineQ1_model1,test="Chisq") 
+
+# although sales_quantity improve mode fit, and since during these two year, price of these store didn't change, sales_quantity is actually same variable of sales. We should not include sales_quantity in our model. So we will still use onlineQ1_model0
+
+summary(onlineQ1_model0)
+
+# visualize residual 
+predict <- predict(onlineQ1_model0)
+resid <- resid(onlineQ1_model0)
+plot(predict,resid,ylab="residuals",xlab="predict") # check heteroscedasticity visually first
+
+library(lmtest)
+gqtest(onlineQ1_model0) # heteroskedasticity.
+bptest(onlineQ1_model0) # heteroskedasticity.
+
+library(sandwich)
+library(foreign)
+coeftest(onlineQ1_model0, vcov = vcovHC(onlineQ1_model0, "HC1"))
+
+library(effects)
+plot(effect(term="post_policy*study_group",mod=onlineQ1_model1, xlevel=2),multiline=T)
+# slops of study group and reference group are roughly same. So policy change do not impact online sales.
+
+```
+
+# Question 2: Impact of policy change on physical store sales. 
+
+# import data for Q2.
+```{r}
+physicalQ2 <- read.csv("physicalQ2.csv")
+
+```
+
+# creat two key independent variables
+```{r}
+physicalQ2$post_policy_numeric <- ifelse(physicalQ2$month_index <51, 0, 1)
+physicalQ2$study_group_numeric <- ifelse(physicalQ2$brand_number==8,0,1)
+
+summary(physicalQ2)
+
+```
+
+# multicolinearity check
+```{r}
+# fist: check the data
+hist(physicalQ2$monthly_sales)
+hist(log(physicalQ2$monthly_sales)) # use log transform
+physicalQ2$log_monthly_sales <- log(physicalQ2$monthly_sales)
+hist(physicalQ2$sa_gender) # use raw data
+hist(physicalQ2$sa_full_time) # use raw data
+hist(log(physicalQ2$sa_avg_years_of_exp)) # use log transform
+physicalQ2$log_sa_avg_years_of_exp <- log(1+physicalQ2$sa_avg_years_of_exp)
+hist(log(physicalQ2$sa_dependent)) # use logt transform
+physicalQ2$log_sa_dependent <- log(1+physicalQ2$sa_dependent)
+hist(log(physicalQ2$sa_avg_rate_of_pay)) # use log data
+physicalQ2$log_sa_avg_rate_of_pay <- log(1+physicalQ2$sa_avg_rate_of_pay)
+hist(log(physicalQ2$monthly_sales_quanity)) # use log transform
+physicalQ2$log_monthly_sales_quanity <-log(1+physicalQ2$monthly_sales_quanity) 
+hist(log(physicalQ2$store_number_of_skus)) # use log transform
+physicalQ2$log_store_number_of_skus <- log(physicalQ2$store_number_of_skus)
+
+df_physicalQ2 <- with(physicalQ2, data.frame(post_policy_numeric,study_group_numeric,sa_gender,
+              sa_full_time,log_sa_avg_years_of_exp,sa_married,log_sa_dependent,log_sa_avg_rate_of_pay,
+              sales_volume_group,month_dummy,log_store_number_of_skus))
+
+library(usdm)
+cor(df_physicalQ2)
+vif(df_physicalQ2) # delete year, brand_number, log_monthly_sales_quanity, store_average_price one by one
+```
+
+# data visualization
+```{r}
+
+# create factor variables
+physicalQ2$post_policy <- factor(physicalQ2$post_policy_numeric)
+physicalQ2$study_group <- factor(physicalQ2$study_group_numeric)
+physicalQ2$month_factor <- factor(physicalQ2$month_dummy)
+
+boxplot(log(physicalQ2$monthly_sales)~physicalQ2$study_group, xlab="study group", ylab="sales")
+boxplot(log(physicalQ2$monthly_sales)~physicalQ2$post_policy,xlab="post policy", ylab="sales")
+boxplot(log(physicalQ2$monthly_sales)~physicalQ2$month_factor,xlab="month", ylab="sales")
+
+```
+
+# model check
+```{r}
+
+Q2_model0 <- lm(data = physicalQ2, log_monthly_sales~post_policy*study_group+month_factor+sa_gender+
+          sa_full_time+log_sa_avg_years_of_exp+log_sa_avg_rate_of_pay+sales_volume_group+sa_married) 
+summary(Q2_model0)
+# add sa_dependent
+Q2_model1 <- lm(data = physicalQ2, log_monthly_sales~post_policy*study_group+month_factor+sa_gender+
+          sa_full_time+log_sa_avg_years_of_exp+log_sa_avg_rate_of_pay+sales_volume_group+sa_married+
+            log_store_number_of_skus)
+summary(Q2_model1)
+
+anova(Q2_model0,Q2_model1) # model 0 is better
+
+# add store_number_of_skus
+Q2_model2 <- lm(data = physicalQ2, log_monthly_sales~post_policy*study_group+month_factor+sa_gender+
+          sa_full_time+log_sa_avg_years_of_exp+log_sa_avg_rate_of_pay+sales_volume_group+sa_married+
+            log_store_number_of_skus)
+
+anova(Q2_model0,Q2_model2) # model 2 is better. Final model
+
+summary(Q2_model2)
+
+predict_Q2 <- predict(Q2_model2)
+resid_Q2 <- resid(Q2_model2)
+plot(predict_Q2,resid_Q2,ylab="residuals",xlab="predict") # let's visualize firt to check heteroskedasticity
+
+library(lmtest)
+gqtest(Q2_model2) # heteroskedasticity.
+bptest(Q2_model2) # heteroskedasticity.
+
+library(sandwich)
+library(foreign)
+coeftest(Q2_model2, vcov = vcovHC(Q2_model2, "HC1"))
+
+ # interaction term is significiant, that means, policy change decrease sales by 45.6%
+
+# generate marginal effect graph
+library(effects)
+plot(effect(term = "post_policy*study_group", mod = Q2_model2, xlevel=2),multiline=T)
+
+```
+
+
+# Q3 & Q4: the data sets for Q3 & Q4 are aggregated by SQL.
+
+#QUESTION 3: Policy change impact on online returns.
+#dependent variable=return_amt; key independent variables=post_policy,study_group, post_policy*studygroup 
+
+```{r}
+#Library Packages
+
+library(QuantPsyc)
+library(effects)
+library(MASS)
+library(usdm)
+library(lmtest)
+library(AER)
+library(foreign)
+library(aod)
+library(ggplot2)
+library(sandwich)
+library(VIF)
+library(msm)
+
+```
+
+
+```{r}
+#Data Initialization
+
+setwd('c:/users/greg/r_projects/bus_analytics_project')
+onl_returns<-read.csv('onl_store_data2.csv')
+summary(onl_returns)
+onl_returns<-na.omit(onl_returns)
+
+```
+
+
+```{r}
+#Raw Data Analysis
+
+hist(onl_returns$return_amt)
+hist(log(onl_returns$return_amt+1))#
+hist(log(onl_returns$daily_sales_amt+1))
+hist(log(onl_returns$daily_sales_amt+1))#
+hist(onl_returns$daily_sales_cnt)
+hist(log(onl_returns$daily_sales_cnt+1))#
+hist(onl_returns$store_number_of_skus)
+hist(log(onl_returns$store_number_of_skus))#
+hist(onl_returns$sa_avg_years_of_exp)
+hist(log(onl_returns$sa_avg_years_of_exp))#
+hist(onl_returns$avg_length_residence)#
+hist(log(onl_returns$avg_length_residence))
+hist(onl_returns$cust_gender) 
+hist(log(onl_returns$cust_gender))#
+hist(onl_returns$homeowner_ratio) 
+hist(log(onl_returns$homeowner_ratio+1))#
+hist(onl_returns$child_ratio) #
+hist(log(onl_returns$child_ratio+1))
+# Raw data plots with dependent var
+
+sg<-subset(onl_returns, study_group==1)
+cg<-subset(onl_returns, study_group==0)
+boxplot(log(sg$return_amt+1)~sg$post_policy,xlab="post_policy (study group)")
+#Returns go down after policy change in the study group (sans regression modelling)
+boxplot(log(cg$return_amt+1)~cg$post_policy,xlab="post_policy (control group")
+#Returns go down up slightly after policy change in the control group (sans regression modelling)
+
+plot(log(onl_returns$daily_sales_amt+1), log(onl_returns$return_amt+1))
+plot(log(onl_returns$daily_sales_cntt+1), log(onl_returns$return_amt+1))
+plot(onl_returns$store_average_price, log(onl_returns$return_amt+1))
+plot(onl_returns$store_number_of_skus, log(onl_returns$return_amt+1))
+boxplot(log(onl_returns$return_amt+1)~onl_returns$sales_volume_group, xlab="sales volume group")
+plot(onl_returns$avg_length_residence, log(onl_returns$return_amt+1))
+plot(log(onl_returns$homeowner_ratio), log(onl_returns$return_amt+1))
+plot(onl_returns$child_ratio, log(onl_returns$return_amt+1))
+boxplot(log(onl_returns$return_amt+1)~onl_returns$avg_income_code, xlab="avg income code")
+boxplot(log(onl_returns$return_amt+1)~onl_returns$avg_age_band, xlab="avg age band")
+boxplot(log(onl_returns$return_amt+1)~onl_returns$, xlab="avg income code")
+
+```
+
+```{r}
+#Stepwise Control Variable Selection
+OLSModel<-lm(log(return_amt+1)~post_policy+study_group+log(daily_sales_amt+1)+log(store_average_price+1)+log(store_number_of_skus+1)+sales_volume_group+avg_income_code+log(homeowner_ratio+1)+child_ratio+avg_age_band+cust_gender+post_policy*study_group, data=onl_returns)
+
+step<-stepAIC(OLSModel, direction="both") #choose vars
+step$anova
+
+model_step<-lm(log(return_amt+1)~post_policy+study_group+log(daily_sales_amt+1)+store_average_price+log(store_number_of_skus+1)+sales_volume_group+log(homeowner_ratio+1)+avg_income_code+avg_age_band+cust_gender+post_policy*study_group, data=onl_returns)
+#Ignore recommendations
+```
+
+```{r}
+#Check for Multicollinearity
+df<-data.frame(onl_returns$post_policy, onl_returns$study_group, log(onl_returns$daily_sales_amt+1), onl_returns$store_average_price, onl_returns$store_number_of_skus, onl_returns$sales_volume_group, onl_returns$avg_income_code, log(onl_returns$homeowner_ratio+1),onl_returns$child_ratio, onl_returns$avg_age_band, onl_returns$cust_gender)
+m1_onl<-as.matrix(cor(df))
+View(m1_onl)
+vif(df)
+#multi-collinearity between daily_sales_amt and store_number_of_skus & store_average_price, child_ratio, homeowner_ratio & sales_volume_group. Also, study_group and cust_gender.
+
+#Can possibly use ave_length_residence to measure homeowners (people don't typically live in the same apartment for a long time)
+df2_onl<-data.frame(onl_returns$post_policy, onl_returns$study_group, log(onl_returns$daily_sales_amt+1),onl_returns$avg_income_code, onl_returns$avg_age_band)
+
+m2_onl<-as.matrix(cor(df2_onl))
+View(m2_onl)
+vif(df2)
+# No dangerous multi-collinearity
+
+```
+
+```{r}
+#OLS: Design and Refine Models
+model1_onl<-lm(log(return_amt+1)~post_policy+study_group+log(daily_sales_amt+1)+avg_income_code+avg_age_band+post_policy*study_group, data=onl_returns)
+summary(model1_onl)
+#insignificant interaction beta - as expected
+
+model2_onl<-lm(log(return_amt+1)~post_policy+study_group+log(daily_sales_amt+1)+avg_income_code+avg_age_band+avg_length_residence+post_policy*study_group, data=onl_returns)
+summary(model2_onl)
+
+anova(model1_onl, model2_onl, test="Chisq")
+#Do not add avg_length of residence
+
+modelOLSfin_onl<-model1_onl
+
+```
+
+
+```{r}
+#Heteroscedasticity Testing
+residual1=resid(modelOLSfin_onl)
+qqnorm(residual1)
+qqline(residual1, col=1) 
+plot(residual1, ylab="Residuals", xlab="all resids")
+plot(log(onl_returns$daily_sales_amt+1),residual1, ylab="Residuals", xlab="daily_sales_amt") # As the residual plot indicates, residual weirdness we have possible heteroskedasticity
+gqtest(modelOLSfin_onl) #no heteroskedasticity
+bptest(modelOLSfin_onl) #heteroskedasticity 
+
+```
+
+```{r}
+#Robust SEs
+cov.modelOLSfin_onl<- vcovHC(modelOLSfin_onl, type="HC1")
+s <- deltamethod(list(~ exp(x1), ~ exp(x2), ~ exp(x3), ~ exp(x4), ~ exp(x5), ~ exp(x6), ~ exp(x7)), coef(modelOLSfin_onl),cov.modelOLSfin_onl)
+std.err <- sqrt(diag(cov.modelOLSfin_onl))
+r.est <- cbind(Estimate= coef(modelOLSfin_onl), "Robust SE" = std.err,
+"Pr(>|z|)" = 2 * pnorm(abs(coef(modelOLSfin_onl)/std.err), lower.tail=FALSE),
+LL = coef(modelOLSfin_onl) - 1.96 * std.err,
+UL = coef(modelOLSfin_onl) + 1.96 * std.err)
+rexp.est <- exp(r.est[, -3])-1 # exponentiate old estimates dropping the p values. Minus 1 to see difference rather than factor
+rexp.est[, "Robust SE"] <- s # replace SEs with estimates for exponentiated coefficients
+rexp.est 
+coeftest(modelOLSfin_onl, vcov = vcovHC(modelOLSfin_onl, "HC1"))
+
+#***OLS MODEL CONCLUSION: Insignificant interaction term, policy change has no effect on returns for online channel
+```
+
+```{r}
+#2SLS Model Approach
+
+df3_onl<-data.frame(log(onl_returns$return_amt+1),log(onl_returns$daily_sales_amt+1),onl_returns$store_average_price,onl_returns$store_number_of_skus, onl_returns$sales_volume_group,onl_returns$avg_length_residence, onl_returns$post_policy, onl_returns$study_group,onl_returns$avg_income_code, onl_returns$avg_age_band)
+m3_onl<-as.matrix(cor(df3_onl))
+mean(m3_onl)
+View(m3_onl)
+
+df4_onl<-data.frame(log(onl_returns$return_amt+1),log(onl_returns$daily_sales_amt+1),onl_returns$store_number_of_skus, onl_returns$sales_volume_group,onl_returns$avg_length_residence,onl_returns$child_ratio, onl_returns$post_policy, onl_returns$study_group,onl_returns$avg_income_code, onl_returns$avg_age_band)
+m4_onl<-as.matrix(cor(df4_onl))
+mean(m34_onl)
+View(m4_onl)
+
+#Try sales_volume group and store_number_of_skus as IVs for daily_sales_amount
+
+ivregmodel_onl<-ivreg(log(return_amt+1)~post_policy+study_group+log(daily_sales_amt+1)+avg_income_code+avg_age_band+post_policy*study_group|sales_volume_group+store_number_of_skus+post_policy+study_group+avg_income_code+avg_age_band+post_policy*study_group, data=onl_returns)
+summary(ivregmodel_onl,diagnostics = TRUE)
+#With F-statistic signficant the IVs relevance assumption holds, Sargan insigificant the exogeneity assumption holds but Wu-Hausman insignificant means there was no endogeneity in the OLS model
+
+
+```
+
+```{r}
+#RETURN_CNT Models 
+colnames(onl_returns)[11]<-"return_cnt"
+#Poisson Model
+summary(poisson1<-glm((return_cnt+1)~post_policy+study_group+log(daily_sales_cnt+1)+avg_income_code+avg_age_band+post_policy*study_group, family="poisson", data=onl_returns))
+
+with(poisson1, null.deviance - deviance)
+with(poisson1, df.null - df.residual)
+with(poisson1, pchisq(null.deviance - deviance, df.null - df.residual, lower.tail = FALSE))
+#Significant so Poisson fails
+
+
+marg_means<-data.frame(post_policy=seq(0,1), study_group=seq(0,1), avg_income_code=mean(onl_returns$avg_income_code),avg_age_band=mean(onl_returns$avg_age_band),daily_sales_cnt=mean(log(onl_returns$daily_sales_cnt+1)))
+
+predict(poisson1, marg_means, type="response", se.fit=TRUE)
+
+summary(negbin1_ol<-glm.nb((return_cnt+1)~post_policy+study_group+log(daily_sales_cnt+1)+avg_age_band+avg_income_code+avg_age_band+post_policy*study_group, data=onl_returns))
+
+```
+
+```{r}
+#Heteroscedasticity
+residual3=resid(negbin1_ol)
+plot(log(onl_returns$daily_sales_cnt+1),residual3, ylab="Residuals", xlab="daily_sales_cnt") # As the residual plot indicates, we have possible heteroskedasticity
+qqnorm(residual3)
+qqline(residual3, col=1)
+gqtest(negbin1_ol)#hetero
+bptest(negbin1_ol)#hetero
+
+with(negbin1_ol, null.deviance - deviance)
+with(negbin1_ol, df.null - df.residual)
+with(negbin1_ol, pchisq(null.deviance - deviance, df.null - df.residual, lower.tail = FALSE))
+
+X2 <- 2 * (logLik(negbin1_ol) - logLik(poisson1))
+X2
+pchisq(X2, df = 1, lower.tail=FALSE) # Negative Binomial over Poisson
+
+```
+
+```{r}
+#Robust SEs
+coeftest(negbin1_ol, vcov = vcovHC(negbin1_ol, "HC1"))
+
+cov.negbin1_ol <- vcovHC(negbin1_ol, type="HC1")
+s <- deltamethod(list(~ exp(x1), ~ exp(x2), ~ exp(x3), ~ exp(x4), ~ exp(x5), ~ exp(x6), ~ exp(x7)), coef(negbin1_ol),cov.negbin1_ol)
+std.err <- sqrt(diag(cov.negbin1_ol))
+r.est <- cbind(Estimate= coef(negbin1_ol), "Robust SE" = std.err,
+"Pr(>|z|)" = 2 * pnorm(abs(coef(negbin1_ol)/std.err), lower.tail=FALSE),
+LL = coef(negbin1_ol) - 1.96 * std.err,
+UL = coef(negbin1_ol) + 1.96 * std.err)
+rexp.est <- exp(r.est[, -3]) # exponentiate old estimates dropping the p values
+rexp.est[, "Robust SE"] <- s # replace SEs with estimates for exponentiated coefficients
+rexp.est 
+
+plot(effect(term="post_policy*study_group",mod=negbin1_ol,xlevel=2),multiline=TRUE)
+#***NEGBIN CONCLUSION: Interaction term is insignificant - policy change likely has no effect on returns in online channel
+
+```
+
+```{r}
+#Control Group Isolation}
+control_group<-subset(onl_returns, study_group==0)
+summary(onl_returns)
+summary(negbin_cg<-glm.nb((return_cnt+1)~post_policy+log(daily_sales_cnt+1)+avg_income_code+avg_age_band, data=control_group))
+#Control group beta is insignificant
+
+residual4=resid(negbin_cg)
+qqnorm(residual4)
+qqline(residual4, col=1)
+gqtest(negbin_cg) #no hetero
+bptest(negbin_cg)#hetero
+
+#use robust SE
+coeftest(negbin_cg, vcov = vcovHC(negbin_cg, "HC1"))
+
+cov.negbin_cg <- vcovHC(negbin_cg, type="HC1")
+s <- deltamethod(list(~ exp(x1), ~ exp(x2), ~ exp(x3), ~ exp(x4), ~ exp(x5)), coef(negbin_cg),cov.negbin_cg)
+std.err <- sqrt(diag(cov.negbin_cg))
+r.est <- cbind(Estimate= coef(negbin_cg), "Robust SE" = std.err,
+"Pr(>|z|)" = 2 * pnorm(abs(coef(negbin_cg)/std.err), lower.tail=FALSE),
+LL = coef(negbin_cg) - 1.96 * std.err,
+UL = coef(negbin_cg) + 1.96 * std.err)
+rexp.est <- exp(r.est[, -3]) # exponentiate old estimates dropping the p values
+rexp.est[, "Robust SE"] <- s # replace SEs with estimates for exponentiated coefficients
+rexp.est 
+ #Beta for post_policy is insignicant, therefore without a control group there is no way to isolate the policy change effect in the study group.
+
+#***Q3 FINAL CONCLUSION: policy change likely has no effect on returns in online channel
+
+```
+
+
+#QUESTION 4: Policy change impact on bms returns.
+#Model 0 OLS; dependent variable=return_amt; key independent variables=post_policy,study_group, #post_policy*studygroup 
+```{r}
+#Data Initialization}
+
+setwd('c:/users/greg/r_projects/bus_analytics_project')
+bms_returns<-read.csv('bms_return_data3.csv')
+summary(bms_returns)
+bms_returns$return_amt[is.na(bms_returns$return_amt)]<-0
+bms_returns<-na.omit(bms_returns)
+
+colnames(bms_returns)[1]<-"store_number"
+
+BMS_RETURNS_BACKUP<-bms_returns
+
+bms_returns<-BMS_RETURNS_BACKUP
+
+```
+
+```{r}
+#Data inspection
+
+summary(bms_returns)
+
+hist(bms_returns$return_amt)
+hist(log(bms_returns$return_amt+1))#
+hist(bms_returns$monthly_sales_amt)
+hist(log(bms_returns$monthly_sales_amt))#
+hist(bms_returns$monthly_sales_cnt) 
+hist(log(bms_returns$monthly_sales_cnt))#
+hist(bms_returns$store_number_of_skus)
+hist(log(bms_returns$store_number_of_skus))#
+hist(bms_returns$sa_avg_years_of_exp)
+hist(log(bms_returns$sa_avg_years_of_exp))#
+hist(bms_returns$avg_length_residence)#
+hist(log(bms_returns$avg_length_residence))
+hist(bms_returns$cust_gender) 
+hist(log(bms_returns$cust_gender))#
+hist(bms_returns$homeowner_ratio) 
+hist(log(bms_returns$homeowner_ratio+1))#
+hist(bms_returns$child_ratio) #
+hist(log(bms_returns$child_ratio+1))
+# Raw data plots with dependent var
+boxplot(bms_returns$return_amt~bms_returns$study_group, xlab="study group") 
+# Returns slightly higher for study group in raw data as expected
+
+sg<-subset(bms_returns, study_group==1)
+cg<-subset(bms_returns, study_group==0)
+boxplot(log(sg$return_amt+1)~sg$post_policy,xlab="post_policy (study group)")
+#Returns go down after policy change in the study group (sans regression modelling)
+boxplot(log(cg$return_amt+1)~cg$post_policy,xlab="post_policy (control group")
+#Returns go down up slightly after policy change in the control group (sans regression modelling)
+
+plot(log(bms_returns$monthly_sales_cnt+1), log(bms_returns$return_amt+1))
+plot(log(bms_returns$monthly_sales_amt+1), log(bms_returns$return_amt+1))
+plot(bms_returns$store_average_price, log(bms_returns$return_amt+1))
+plot(bms_returns$store_number_of_skus, log(bms_returns$return_amt+1))
+plot(bms_returns$sa_gender, log(bms_returns$return_amt+1))
+plot(bms_returns$sa_full_time, log(bms_returns$return_amt+1))
+plot(log(bms_returns$sa_avg_years_of_exp), log(bms_returns$return_amt+1))
+plot(bms_returns$sa_married, log(bms_returns$return_amt+1))
+plot(bms_returns$sa_avg_rate_of_pay, log(bms_returns$return_amt+1))
+plot(bms_returns$sa_dependent, log(bms_returns$return_amt+1))
+boxplot(log(bms_returns$return_amt+1)~bms_returns$sales_volume_group, xlab="sales volume group")
+plot(bms_returns$avg_length_residence, log(bms_returns$return_amt+1))
+plot(bms_returns$homeowner_ratio, log(bms_returns$return_amt+1))
+plot(bms_returns$child_ratio, log(bms_returns$return_amt+1))
+boxplot(log(bms_returns$return_amt+1)~bms_returns$avg_income_code, xlab="avg income code")
+boxplot(log(bms_returns$return_amt+1)~bms_returns$avg_age_band, xlab="avg age band")
+boxplot(log(bms_returns$return_amt+1)~bms_returns$, xlab="avg income code")
+
+```
+
+```{r}
+#Stepwise Control Variable Selection}
+
+OLSModel<-lm(log(return_amt+1)~post_policy+study_group+log(monthly_sales_amt+1)+log(store_average_price+1)+log(store_number_of_skus+1)+sa_gender+sa_full_time+log(sa_avg_years_of_exp+1)+sa_married+sa_avg_rate_of_pay+sa_dependent+avg_income_code+homeowner_ratio+avg_length_residence+child_ratio+avg_age_band+cust_gender+post_policy*study_group, data=bms_returns)
+
+step<-stepAIC(OLSModel, direction="both") #choose vars
+step$anova
+
+model_step<-lm(log(return_amt+1)~post_policy+study_group+log(monthly_sales_amt+1)+store_average_price+store_number_of_skus+sa_gender+sa_avg_rate_of_pay+avg_income_code+avg_age_band+homeowner_ratio+child_ratio+cust_gender+post_policy*study_group, data=bms_returns)
+summary(model_step)
+
+step<-stepAIC(model_step, direction="both") #choose vars
+step$anova
+```
+
+```{r}
+#Check for Multicollinearity
+
+df1_bm<-data.frame(bms_returns$post_policy, bms_returns$study_group,log(bms_returns$monthly_sales_amt+1), log(bms_returns$store_average_price+1),log(bms_returns$store_number_of_skus+1),bms_returns$sa_gender,+log(bms_returns$sa_avg_years_of_exp+1),bms_returns$sa_avg_rate_of_pay, bms_returns$avg_income_code, bms_returns$avg_age_band,bms_returns$homeowner_ratio,bms_returns$child_ratio,bms_returns$avg_length_residence, bms_returns$cust_gender)
+m1_bm<-as.matrix(cor(df1_bm))
+View(m1_bm)
+vif(df1_bm)
+#multi-collinearity between monthly_sales_amt and store_number_of_skus & store_average_price & cust_gender, can remove all except monthly_sales_amt. Also, homeowner_ratio and child_ratio are redundant, removing child_ratio.
+hist(bms_returns$homeowner_ratio)
+df2_bm<-data.frame(bms_returns$post_policy,bms_returns$study_group,log(bms_returns$monthly_sales_cnt+1),bms_returns$sa_gender,log(bms_returns$sa_avg_years_of_exp+1),bms_returns$sa_avg_rate_of_pay,bms_returns$avg_income_code,bms_returns$avg_age_band,bms_returns$avg_length_residence,bms_returns$homeowner_ratio)
+m2_bm<-as.matrix(cor(df2_bm))
+View(m2_bm)
+vif(m2_bm)
+#remove sa_gender and homeowner_ratio. Using log of monthly_sales_cnt instead of amount decreases multicollinearity with other variables.
+
+df3_bm<-data.frame(bms_returns$post_policy, bms_returns$study_group,log(bms_returns$monthly_sales_cnt+1),log(bms_returns$sa_avg_years_of_exp+1),bms_returns$avg_income_code,bms_returns$avg_age_band)
+m3_bm<-as.matrix(cor(df3_bm))
+View(m3_bm)
+vif(m3_bm)
+# No dangerous multi-collinearity 
+
+
+```
+
+```{r}
+#OLS: Design and Refine Models}
+
+model1_bm<-lm(log(return_amt+1)~post_policy+study_group+log(monthly_sales_cnt+1)+log(sa_avg_years_of_exp+1)+avg_income_code+avg_age_band+post_policy*study_group, data=bms_returns)
+summary(model1_bm)
+
+
+model2_bm<-lm(log(return_amt+1)~post_policy+study_group+log(monthly_sales_cnt+1)+log(sa_avg_years_of_exp+1)+avg_income_code+avg_age_band+avg_length_residence+post_policy*study_group, data=bms_returns)
+summary(model2_bm)
+
+anova(model1_bm, model2_bm, test="Chisq")
+##Length of residence does not improve model fit
+
+model3_bm<-lm(log(return_amt+1)~post_policy+study_group+log(monthly_sales_cnt+1)+log(sa_avg_years_of_exp+1)+sa_avg_rate_of_pay+avg_income_code+avg_age_band+post_policy*study_group, data=bms_returns)
+summary(model3_bm)
+
+anova(model1_bm, model3_bm, test="Chisq")
+# sa_avg_rate_of_pay improves fit
+
+modelOLSfin_bm<-model3_bm # FINAL OLS MODEL
+
+
+pred<-predict(modelOLSfin_bm, type="response") 
+summary(pred)#All positive pred values - good
+
+```
+
+
+```{r}
+#Heteroscedasticity Testing}
+
+residual1_bm=resid(modelOLSfin_bm)
+plot(residual1_bm, ylab="Residuals", xlab="all vars") 
+qqnorm(residual1_bm)
+qqline(residual1_bm, col=1) #Not Good
+plot(log(bms_returns$monthly_sales_cnt+1),residual1_bm, ylab="Residuals", xlab="log monthly_sales_cnt") # As the residual plot indicates, we have possible heteroskedasticity
+gqtest(modelOLSfin_bm) #heteroskedasticity
+bptest(modelOLSfin_bm) #heteroskedasticity 
+```
+
+```{Robuts SEs}
+#Use robust SEs
+coeftest(modelOLSfin_bm, vcov = vcovHC(modelOLSfin_bm, "HC1"))
+
+cov.modelOLSfin_bm <- vcovHC(modelOLSfin_bm, type="HC1")
+s <- deltamethod(list(~ exp(x1), ~ exp(x2), ~ exp(x3), ~ exp(x4), ~ exp(x5), ~ exp(x6), ~ exp(x7), ~ exp(x8), ~ exp(x9)), coef(modelOLSfin_bm),cov.modelOLSfin_bm)
+std.err <- sqrt(diag(cov.modelOLSfin_bm))
+r.est <- cbind(Estimate= coef(modelOLSfin_bm), "Robust SE" = std.err,
+"Pr(>|z|)" = 2 * pnorm(abs(coef(modelOLSfin_bm)/std.err), lower.tail=FALSE),
+LL = coef(modelOLSfin_bm) - 1.96 * std.err,
+UL = coef(modelOLSfin_bm) + 1.96 * std.err)
+rexp.est <- exp(r.est[, -3])-1 # minus 1 to see change rather than factor
+rexp.est[, "Robust SE"] <- s # replace SEs with estimates for exponentiated coefficients
+rexp.est 
+
+#OLS RESULTS: Change in policy decreases return dollar amount by 36.62%
+
+plot(effect(term="post_policy*study_group",mod=modelOLSfin_bm,xlevel=2),multiline=TRUE)
+```
+
+```{r}
+#Although the interaction term coefficient from the data set with both study group and control group is the final result (because the difference between the study group and control group is the effect of the policy change),   we isolate the groups to check if each policy change beta is significant in case there was specification errors in the OLS model.
+sg<-subset(bms_returns, bms_returns$study_group==1)
+
+modelOLSfin_bm_sg<-lm(log(return_amt+1)~post_policy+log(monthly_sales_cnt+1)+log(sa_avg_years_of_exp+1)+sa_avg_rate_of_pay+avg_income_code+avg_age_band, data=sg)
+summary(modelOLSfin_bm_sg)
+
+cg<-subset(bms_returns, bms_returns$study_group==0)
+
+modelOLSfin_bm_cg<-lm(log(return_amt+1)~post_policy+log(monthly_sales_cnt+1)+log(sa_avg_years_of_exp+1)+sa_avg_rate_of_pay+avg_income_code+avg_age_band, data=cg)
+summary(modelOLSfin_bm_cg)
+
+plot(effect(term="post_policy",mod=modelOLSfin_bm_sg,xlevel=2),more = TRUE)
+
+plot(effect(term="post_policy",mod=modelOLSfin_bm_cg,xlevel=2),more=TRUE)
+#Magnitude of interaction term beta seems a bit high. Sales amount is endogenous due to simultaneity and possibly OV as well - perhaps other store attributes can serve as IVs. 
+```
+
+
+```{r}
+#IV Variable Assessment}
+
+df5_bm<-data.frame(log(bms_returns$return_amt+1),log(bms_returns$monthly_sales_amt+1),bms_returns$sa_married,bms_returns$sa_full_time, bms_returns$sa_dependent, bms_returns$post_policy, bms_returns$study_group,bms_returns$sa_gender,bms_returns$sa_avg_rate_of_pay,+log(bms_returns$sa_avg_years_of_exp+1),bms_returns$avg_income_code,bms_returns$avg_age_band,bms_returns$homeowner_ratio)
+m5_bm<-as.matrix(cor(df5_bm))
+View(m5_bm)
+
+df6_bm<-data.frame(log(bms_returns$return_amt+1),log(bms_returns$monthly_sales_cnt+1),bms_returns$sa_married,bms_returns$sa_dependent, bms_returns$sa_full_time, bms_returns$sa_gender, bms_returns$sa_avg_rate_of_pay, bms_returns$study_group,+log(bms_returns$sa_avg_years_of_exp+1),bms_returns$avg_income_code,bms_returns$avg_age_band,bms_returns$homeowner_ratio)
+m6_bm<-as.matrix(cor(df6_bm))
+mean(m6_bm)
+View(m6_bm)
+#No possible IV candidates 
+
+```
+
+
+```{r}
+#RETURN_CNT Models 
+#Try changing the dependent variable to log return count and using Poisson/Negative Binomial
+#Sales Cnt
+summary(poisson1_bm<-glm((return_cnt+1)~post_policy+study_group+log(monthly_sales_cnt+1)+log(sa_avg_years_of_exp+1)+sa_avg_rate_of_pay+avg_age_band+avg_income_code+post_policy*study_group, family="poisson", data=bms_returns))
+
+residual2_bm=resid(poisson1_bm)
+plot(residual2_bm, ylab="Residuals", xlab="")
+qqnorm(residual2_bm)
+qqline(residual2_bm, col=1)
+
+with(poisson1_bm, null.deviance - deviance)
+with(poisson1_bm, df.null - df.residual)
+with(poisson1_bm, pchisq(null.deviance - deviance, df.null - df.residual, lower.tail = FALSE))
+#Significant so Poisson fails
+
+marg_means1_bm<-data.frame(post_policy=seq(0,1), study_group=seq(0,1),monthly_sales_cnt=mean(log(bms_returns$monthly_sales_cnt+1)),sa_avg_rate_of_pay=mean(bms_returns$sa_avg_rate_of_pay),avg_age_band=mean(bms_returns$avg_age_band), sa_avg_years_of_exp=mean(log(bms_returns$sa_avg_years_of_exp+1)), avg_income_code=mean(bms_returns$avg_income_code))
+
+
+#Negative Binomial Model
+summary(negbin1_bm<-glm.nb((return_cnt+1)~post_policy+study_group+log(monthly_sales_cnt+1)+sa_avg_rate_of_pay+avg_age_band+avg_income_code+log(sa_avg_years_of_exp+1)+post_policy*study_group, data=bms_returns))
+exp(coef(negbin1_bm))
+
+#Compare to Poisson model
+with(negbin1_bm, null.deviance - deviance)
+with(negbin1_bm, df.null - df.residual)
+with(negbin1_bm, pchisq(null.deviance - deviance, df.null - df.residual, lower.tail = FALSE))
+X2 <- 2 * (logLik(negbin1_bm) - logLik(poisson1_bm))
+X2
+pchisq(X2, df = 1, lower.tail=FALSE) # Significant Likelihood Ratio Test: Negative Binomial over Poisson
+```
+
+```{r}
+#Negbin1 Analysis
+
+#Check for hetero
+residual4_bm=resid(negbin1_bm)
+plot(log(bms_returns$monthly_sales_cnt+1),residual4_bm, ylab="Residuals", xlab="monthly_sales_cnt") # As the residual plot indicates, we have possible heteroskedasticity
+qqnorm(residual4_bm)
+qqline(residual4_bm,col=1) 
+gqtest(negbin1_bm) #heteroscedasticity
+bptest(negbin1_bm) #heteroscedasticity
+```
+
+```{r}
+
+# Robust SEs
+coeftest(negbin1_bm, vcov = vcovHC(negbin1_bm, "HC1")) #interaction term still significant
+
+cov.negbin1_bm <- vcovHC(negbin1_bm, type="HC1")
+s <- deltamethod(list(~ exp(x1), ~ exp(x2), ~ exp(x3), ~ exp(x4), ~ exp(x5), ~ exp(x6), ~ exp(x7), ~ exp(x8), ~ exp(x9)), coef(negbin1_bm),cov.negbin1_bm)
+std.err <- sqrt(diag(cov.negbin1_bm))
+r.est <- cbind(Estimate= coef(negbin1_bm), "Robust SE" = std.err,
+"Pr(>|z|)" = 2 * pnorm(abs(coef(negbin1_bm)/std.err), lower.tail=FALSE),
+LL = coef(negbin1_bm) - 1.96 * std.err,
+UL = coef(negbin1_bm) + 1.96 * std.err)
+rexp.est <- exp(r.est[, -3])-1 # exponentiate old estimates dropping the p values. minus 1 to see as difference not a factor
+rexp.est[, "Robust SE"] <- s # replace SEs with estimates for exponentiated coefficients
+rexp.est
+#***NEGBIN MODEL CONCLUSION: Policy change decreases number of returns by 25.86%
+
+plot(effect(term="post_policy*study_group",mod=negbin1_bm,xlevel=2),multiline=TRUE)
+
+```
+
+```{r}
+#Control Group Isolation}
+bms_returns_cg<-subset(bms_returns, study_group==0)
+
+summary(negbin_cg<-glm.nb((return_cnt+1)~post_policy+log(monthly_sales_cnt+1)+sa_avg_rate_of_pay+avg_age_band+avg_income_code+log(avg_length_residence+1), data=bms_returns_cg))
+
+#use robust SE:
+coeftest(negbin_cg, vcov = vcovHC(negbin_cg, "HC1")) #post_policy still significant
+
+cov.negbin_cg <- vcovHC(negbin_cg, type="HC1")
+s <- deltamethod(list(~ exp(x1), ~ exp(x2), ~ exp(x3), ~ exp(x4), ~ exp(x5), ~ exp(x6), ~ exp(x7)), coef(negbin_cg),cov.negbin_cg)
+std.err <- sqrt(diag(cov.negbin_cg))
+r.est <- cbind(Estimate= coef(negbin_cg), "Robust SE" = std.err,
+"Pr(>|z|)" = 2 * pnorm(abs(coef(negbin_cg)/std.err), lower.tail=FALSE),
+LL = coef(negbin_cg) - 1.96 * std.err,
+UL = coef(negbin_cg) + 1.96 * std.err)
+rexp.est <- exp(r.est[, -3])-1 # exponentiate old estimates dropping the p values
+rexp.est[, "Robust SE"] <- s # replace SEs with estimates for exponentiated coefficients
+rexp.est
+#demonstrate IRRs. The output indicates an increase in returns (due to environmental control factors) of 19.02% in the control group
+
+plot(effect(term="post_policy",mod=negbin_cg,xlevel=2),multiline=TRUE)
+```
+
+```{r}
+#Study Group Isolation}
+bms_returns_sg<-subset(bms_returns, study_group==1)
+
+summary(negbin_sg<-glm.nb((return_cnt+1)~post_policy+log(monthly_sales_cnt+1)+sa_avg_rate_of_pay+avg_age_band+avg_income_code+log(avg_length_residence+1), data=bms_returns_sg))
+
+#use robust SE:
+coeftest(negbin_sg, vcov = vcovHC(negbin_sg, "HC1")) #post_policy still significant
+
+cov.negbin_sg <- vcovHC(negbin_sg, type="HC1")
+s <- deltamethod(list(~ exp(x1), ~ exp(x2), ~ exp(x3), ~ exp(x4), ~ exp(x5), ~ exp(x6), ~ exp(x7)), coef(negbin_sg),cov.negbin_sg)
+std.err <- sqrt(diag(cov.negbin_sg))
+r.est <- cbind(Estimate= coef(negbin_sg), "Robust SE" = std.err,
+"Pr(>|z|)" = 2 * pnorm(abs(coef(negbin_sg)/std.err), lower.tail=FALSE),
+LL = coef(negbin_sg) - 1.96 * std.err,
+UL = coef(negbin_sg) + 1.96 * std.err)
+rexp.est <- exp(r.est[, -3])-1 # exponentiate old estimates dropping the p values
+rexp.est[, "Robust SE"] <- s # replace SEs with estimates for exponentiated coefficients
+rexp.est
+#demonstrate IRRs. The output  indicates that policy change in the study group decreases returns by 11.17% 
+plot(effect(term="post_policy",mod=negbin_sg,xlevel=2),multiline=TRUE)
+
+
+#***Q4 FINAL CONCLUSION: Policy change leads to 25.86% decrease in the number of returns and a 36.62% decrease in the return dollar amount for bms channel
+```
+
+
+
+#Q5 : What is the impact of the policy change on customers puchase behavior?
+
+
+getwd()
+setwd("C:/Users/jhsal/Desktop/SCU/Econometrics R/Final_project")
+transactions=read.table("Transactions and customer attributes.txt" , sep = "\t", header = TRUE)
+
+str(transactions)
+#- The data cover all transactions made between April 1st, 2013 and March 31st, 2014. 
+
+#- The return policy has changed from 90 days to 45 days on October 1st, 2013.
+
+#- Brand_number =5 : Secondary brand - brick-and-mortar stores 
+#- Brand_number =3 : Outlet brand - brick-and-mortar stores 
+#- Brand_number =8 : Sister brand - brick-and-mortar stores 
+#- Brand_number =2 : Primary brand - brick-and-mortar stores 
+#- Brand_number =1 : Online stores 
+
+#- There are three online channel stores with store numbers 2 (primary brand), 6 (secondary brand), and 10 (sister brand)
+
+#- All other store numbers indicate brick-and-mortar stores 
+
+#- The return policy for online store 10 and for all sister brand brick-and-mortar stores (stores under Brand_number=8)
+#has not changed. 
+#For those stores, the return policy was a 60 days-return policy before October 1st, 2013, and is still a 60-days return policy.
+
+#- Product categories:
+#1-Bridal #3-Solitaires #4-Diamond Fashion #11-Diamond Solitaires Jewelry #20- Diamond Wedding Band
+#2- Gold Wed Bands #5-Semi Precious #6-Mens #7-Gold Earrings #8-In House Special Event #9-Beads
+#10-Piercings / Close Out #12-Gold Chain / Jewelry #13-Watches #14-Pre-Owned #15-Specialized Jewelry
+#16-Estate #17-Events #18-Trade Ins #19-Repair / Warranty #21-Sterling Silver
+
+#RQ1 : What is the impact of the policy change on online channel sales?
+
+
+#customer behavior on net purchase amount - OLS model 
+
+# import data for Q5.
+```{r}
+finalQ5 <- read.csv("finalQ5.csv")
+
+```
+
+#customer behavior on net purchase amount - OLS model 
+
+```{r}
+hist(log(finalQ5$net_purchase_amount))
+log_net_purchase_amount = log(1+finalQ5$net_purchase_amount) #take this
+hist(finalQ5$age_band)
+hist(finalQ5$est_income_code)
+hist(finalQ5$length_of_residence)
+hist(log(finalQ5$units)) #take this
+log_units = log(finalQ5$units) 
+
+#run initial model
+modelQ5_OLS = lm(log_net_purchase_amount ~ post_policy*study_group + gender + age_band + est_income_code + ethnic_code + homeowner_code + length_of_residence + child + log_units, data = finalQ5)
+summary(modelQ5_OLS)#include log_units. interaction terms pvalue is significnat and the coefficient is -0.18, which means 18%decrease in net_purchase_amount to the study group after return policy changed 
+
+modelQ5_OLS_1 = lm(log_net_purchase_amount ~ post_policy*study_group + gender + age_band + est_income_code + ethnic_code + homeowner_code + length_of_residence + child , data = finalQ5)
+summary(modelQ5_OLS_1) #exclude log_units. 
+
+anova(modelQ5_OLS,modelQ5_OLS_1, test="Chisq") #likelihood ratio test pvalue is significnat. modelQ5_OLS is better, which include log_units.
+
+residual=resid(modelQ5_OLS)
+plot(residual) #raw data residuals look normal
+plot(finalQ5$post_policy*finalQ5$study_group,residual, ylab="Residuals", xlab="post_policy*study_group") #residuals seem different for interaction terms independent variable 
+qqnorm(residual)#raw data residuals look okay but not perfectly normal
+qqline(residual,col="red")
+
+
+library(MASS)
+library(QuantPsyc)#good model test
+step = stepAIC(modelQ5_OLS, direction = "both")
+step$anova #same as initial model 
+
+library(effects)#generate marginal effects plot for interaction terms
+plot(effect(term = "post_policy*study_group",mod=modelQ5_OLS, xlevels=2),multiline = TRUE)
+```
+
+#check multicollinearity 
+```{r}
+install.packages("VIF")
+library(VIF)
+install.packages("usdm")
+library(usdm)
+finalQ5$homeowner_code_num = ifelse(finalQ5$homeowner_code == "O" , 1, 0)
+finalQ5$child_num = ifelse(finalQ5$child == "Y",1,0)
+finalQ5$gender_num = ifelse(finalQ5$gender == "F", 1, ifelse(finalQ5$gender == "M", 2, 3))
+finalQ5$ethnic_code_num= 
+  ifelse(finalQ5$ethnic_code == "B", 1 ,
+         ifelse(finalQ5$ethnic_code == "D", 2, 
+                ifelse(finalQ5$ethnic_code == "F", 3 ,
+                       ifelse(finalQ5$ethnic_code == "G", 4,
+                              ifelse(finalQ5$ethnic_code == "H", 5, 
+                                     ifelse(finalQ5$ethnic_code == "I", 6,
+                                            ifelse(finalQ5$ethnic_code == "J", 7 ,
+                                                   ifelse(finalQ5$ethnic_code == "M", 8,
+                                                          ifelse(finalQ5$ethnic_code == "N",9,
+                                                                 ifelse(finalQ5$ethnic_code == "O", 10,
+                                                                        ifelse(finalQ5$ethnic_code == "P", 11,
+                                                                               ifelse(finalQ5$ethnic_code == "R", 12,
+                                                                                      ifelse(finalQ5$ethnic_code == "S", 13,
+                                                                                             ifelse(finalQ5$ethnic_code == "U", 14,
+                                                                                                    ifelse(finalQ5$ethnic_code == "X", 15,16)))))))))))))))
+
+
+df = data.frame(finalQ5$post_policy, finalQ5$study_group, finalQ5$gender_num, finalQ5$age_band, finalQ5$est_income_code, finalQ5$ethnic_code_num, finalQ5$homeowner_code_num, finalQ5$length_of_residence, finalQ5$child_num, finalQ5$log_units)
+cor(df)
+vif(df) #no multicolinearity 
+```
+
+#customer behavior on net purchase amount - poisson
+```{r}
+
+modelQ5_possion =  glm(units ~ post_policy*study_group + net_purchase_amount + gender + age_band + est_income_code + ethnic_code + homeowner_code + length_of_residence + child, family="poisson",data=finalQ5)
+summary(modelQ5_possion) #interaction term pvalue is insignificant. There is no impact. 
+
+install.packages("lmtest")
+library(lmtest)
+with(modelQ5_possion, null.deviance - deviance)
+with(modelQ5_possion, df.null - df.residual)
+with(modelQ5_possion, pchisq(null.deviance - deviance, df.null - df.residual, lower.tail = FALSE)) #model fit pvalue is significant. model fit is not close to ideal model
+modelQ5_possion_post_policy_Null <- update(modelQ5_possion, . ~ . - post_policy*study_group) #the overall impact of post_policy*study_group
+anova(modelQ5_possion,modelQ5_possion_post_policy_Null, test="Chisq")#pvalue is significant. post_policy*study_group is significant parameter of purchased unit items
+```
+
+#customer behavior on net purchase amount - negative binomial
+```{r}
+library(foreign)
+library(MASS)
+modelQ5_NB = glm.nb(units ~ post_policy*study_group + net_purchase_amount + gender + age_band + est_income_code + ethnic_code + homeowner_code + length_of_residence + child, data = finalQ5)
+summary(modelQ5_NB) #interaction term pvalue is significant. After return policy, log units changed by 0.0687.
+
+with(modelQ5_NB, null.deviance - deviance)
+with(modelQ5_NB, df.null - df.residual)
+with(modelQ5_NB, pchisq(null.deviance - deviance, df.null - df.residual, lower.tail = FALSE)) #model fit pvalue is significant. model fit is different from null model 
+
+X2 <- 2 * (logLik(modelQ5_NB) - logLik(modelQ5_possion))
+X2
+pchisq(X2, df = 1, lower.tail=FALSE) #likelihood test for poisson and NB. pvalue significant- NB better(a model with overdispersion parameter is better)
+
+est <- cbind(Estimate = coef(modelQ5_NB), confint(modelQ5_NB))
+exp(est)
+exp(coef(modelQ5_NB)) #generate IRR. 1.07097times increase(7.097% increase)in unit items for study group after policy changed  
+```
+#check heteroskedasticity
+```{r}
+library(sandwich)
+library(msm)
+library(lmtest)
+gqtest(modelQ5_OLS) #significant. There is heteroskedasticity
+bptest(modelQ5_OLS) #significant. There is heteroskedasticity
+coeftest(modelQ5_OLS, vcov=vcovHC(modelQ5_OLS, type="HC1")) #fix OLS with robust standard error
+
+gqtest(modelQ5_NB) #insignificant. There is no heteorskedasticity
+bptest(modelQ5_NB) #significant. There is heteroskedasticity
+
+cov.modelQ5_NB <- vcovHC(modelQ5_NB, type="HC0")
+s <- deltamethod(list(~ exp(x1), ~ exp(x2), ~ exp(x3)~ exp(x4)), coef(modelQ5_NB), cov.modelQ5_NB) 
+std.err <- sqrt(diag(cov.modelQ5_NB))
+r.est <- cbind(Estimate= coef(modelQ5_NB), "Robust SE" = std.err,
+               "Pr(>|z|)" = 2 * pnorm(abs(coef(modelQ5_NB)/std.err), lower.tail=FALSE),
+               LL = coef(modelQ5_NB) - 1.96 * std.err,
+               UL = coef(modelQ5_NB) + 1.96 * std.err)
+rexp.est <- exp(r.est) # exponentiate old estimates dropping the p values
+rexp.est[, "Robust SE"] <- s  # replace SEs with estimates for exponentiated coefficients
+rexp.est[, "Pr(>|z|)"]  <- 2 * pnorm(abs(exp(coef(modelQ5_NB))/s), lower.tail=FALSE) # replace pvalue with estimates for exponentiated coefficients and robust standard errors
+rexp.est
+
+```
+
+
+# data set for Q6 is raw data
+
+##Research Question 6: What is the impact of the policy change on customers return behavior?
+
+
+```{r}
+#Create two new dummy variables Post_policy & study_group
+transaction$post_policy = ifelse(transaction$day<182, 0, 1)
+transaction$study_group = ifelse(transaction$brand_number == 8 | (transaction$brand_number == 1 & transaction$store_number == 10) , 0 , 1)
+```
+
+
+```{r}
+#Change gender,homeowner code and child variables into dummy variables
+transaction$gender1 = ifelse(transaction$gender == "F", 1, ifelse(transaction$gender == "M", 2, 3))
+transaction$homeowner_code1 = ifelse(transaction$homeowner_code == "O" , 1, 0)
+transaction$child1 = ifelse(transaction$child == "Y",1,0)
+```
+
+```{r}
+#check our dataset
+hist(transaction$est_income_code)  #this
+hist(log(transaction$est_income_code))
+hist(transaction$length_of_residence) #this
+hist(log(transaction$length_of_residence))
+hist(transaction$net_purchase_amount)
+hist(log(transaction$net_purchase_amount)) #this
+hist(transaction$age_band) #this
+hist(log(transaction$age_band))
+```
+
+```{r}
+#conceptually, remove all the data when net purchase amount = 0, it does'nt make sense
+filtertransaction = transaction$net_purchase_amount == 0
+Q6_1 = transaction[!filtertransaction, ]
+```
+
+```{r}
+#Modefiy dataset, eliminate NA cells
+Q6_1$return_date=NULL
+Q6_1$return_store=NULL
+Q6_1$time_to_return=NULL
+Q6_2 = Q6_1[!(rowSums(is.na(Q6_1))),]
+```
+
+```{r}
+#logit model 1
+L1Q6 = glm(return ~ post_policy*study_group + log(net_purchase_amount) + gender1 + factor(ethnic_code)+ homeowner_code1 + child1 + age_band + est_income_code + length_of_residence, data=Q6_2, family = "binomial")
+summary(M1Q6)
+#logit model 2
+L2Q6 = glm(return ~ post_policy*study_group + log(net_purchase_amount) + gender1 + homeowner_code1 + child1 + age_band + est_income_code + length_of_residence, data=Q6_2, family = "binomial")
+summary(L2Q6)
+#use Irtest to compare two models
+lrtest(L1Q6, L2Q6)
+```
+
+```{r}
+#check probit model 1 fit
+with(M1Q6, null.deviance - deviance)
+with(M1Q6, df.null - df.residual)
+with(M1Q6, pchisq(null.deviance - deviance, df.null - df.residual, lower.tail = FALSE))
+#test for heteroscedasticity
+library(lmtest)
+library(zoo)
+gqtest(M1Q6) #insig
+bptest(M1Q6) #sig
+#generate robust standard
+
+```
+
+
+```{r}
+#probit model 1
+P1Q6 = glm(return ~ post_policy*study_group + log(net_purchase_amount) + gender1 + factor(ethnic_code)+ homeowner_code1 + child1 + age_band + est_income_code + length_of_residence, data=Q6_2, family=binomial(link="probit"))
+summary(P1Q6)
+#probit model 2
+P2Q6 = glm(return ~ post_policy*study_group + log(net_purchase_amount) + gender1+ homeowner_code1 + child1 + age_band + est_income_code + length_of_residence, data=Q6_2, family=binomial(link="probit"))
+summary(P2Q6)
+#use Irtest to compare two models
+lrtest(P1Q6, P2Q6)
+```
+
+
+```{r}
+#generates the analysis of deviance table.
+anova(L1Q6, test="Chisq")
+anova(P1Q6, test="Chisq")
+```
+
+```{r}
+#check probit model 1 fit
+with(P1Q6, null.deviance - deviance)
+with(P1Q6, df.null - df.residual)
+with(P1Q6, pchisq(null.deviance - deviance, df.null - df.residual, lower.tail = FALSE))
+##test for heteroscedasticity
+gqtest(P1Q6) #insig
+bptest(P1Q6) #sig
+
+```
+
+```{r}
+library(MASS)
+library(betareg)
+library(mfx)
+
+#find logit marginal effect
+logitmfx(formula=return~post_policy*study_group + log(net_purchase_amount) + gender1 + factor(ethnic_code) + homeowner_code1 + child1 + age_band + est_income_code + length_of_residence, data=Q6_2,robust=TRUE)
+
+#find probit marginal effect
+probitmfx(formula=return~post_policy*study_group + log(net_purchase_amount) + gender1 + factor(ethnic_code) + homeowner_code1 + child1 + age_band + est_income_code + length_of_residence, data=Q6_2,robust=TRUE)
+```
+
+
+
+
+
